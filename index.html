@@ -73,7 +73,7 @@ label.tampil input { width: 18px; height: 18px; }
   const $ = (i) => document.getElementById(i);
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const kota = (s) => s.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-  const letak = (id) => id === "pusat" ? ["Semua cabang", "Pusat"] : id === "pajak" ? ["–", "Pajak"]
+  const letak = (id) => id === "pusat" ? ["Semua cabang", "Pusat"] : id === "pajak" ? ["–", "Pajak"] : id === "gudang" ? ["Semua cabang", "Gudang"]
     : id.startsWith("sales-") ? [kota(id.slice(6)), "Sales"] : [kota(id), "Admin Cabang"];
   const kolom = (a, i) => a.peran === "administrator" ? (i ? "Semua modul" : "Semua cabang") : [...new Set(a.halaman.map((h) => letak(h)[i]))].join(", ") || "–";
   let token = null, rekamTerakhir = null, putar = null;

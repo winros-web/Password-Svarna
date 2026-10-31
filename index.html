@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<title>Ruang Kontrol Sandi</title>
+<!-- Ruang kontrol sandi web dashboard (BEN, 31 Okt 2026, permintaan Joe): tabel akun; isi SANDI BARU lalu SIMPAN & REKAM
+     (dikirim ke kelola_web.py Mac Winros, hanya lewat Tailscale). Halaman ini juga penerima: perubahan dari Kelola akun web
+     ikut tampil (dibaca ulang tiap 10 detik). Sandi tidak pernah ditampilkan - Mac tidak menyimpan sandi. -->
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #11171d; color: #e6ecf1; font: 17px/1.45 "Aptos Narrow", "Archivo Narrow", "Arial Narrow", system-ui, sans-serif; }
+@media (min-width: 700px) { html { zoom: .75; } }
+main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 60px; }
+h1 { font-size: 24px; letter-spacing: .3em; text-transform: uppercase; margin: 8px 0 20px; }
+h2 { font-size: 15px; letter-spacing: .25em; color: #6fb3d2; text-transform: uppercase; margin: 28px 0 10px; }
+button { font: 600 15px "Aptos Narrow", "Archivo Narrow", sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #e6ecf1;
+  background: transparent; border: 1px solid rgba(255, 255, 255, .25); border-radius: 999px; padding: 10px 20px; cursor: pointer; }
+button:hover { background: #e6ecf1; color: #11171d; }
+button:disabled { opacity: .4; cursor: wait; background: transparent; color: #e6ecf1; }
+button.utama { background: #2b6382; border-color: #2b6382; }
+input { font: 600 17px "Aptos Narrow", "Archivo Narrow", sans-serif; color: #fff; background: #18212a; border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px; padding: 8px 12px; width: 100%; outline: none; }
+input:focus { border-color: #6fb3d2; }
+#masuk { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+#masuk input { width: min(420px, 100%); height: 56px; border-radius: 999px; text-align: center; background: #2b6382; font-size: 20px; }
+#masuk p { color: #9aa8b5; margin: 0; }
+.tabel { width: 100%; border-collapse: collapse; }
+.tabel th, .tabel td { border: 1px solid #2a3642; padding: 6px 10px; text-align: left; vertical-align: middle; }
+.tabel th { background: #18212a; color: #9aa8b5; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; position: sticky; top: 0; }
+.tabel td.akun { font-weight: 600; text-transform: uppercase; white-space: nowrap; }
+.tabel td.sandi { width: 260px; padding: 4px 6px; }
+.tabel tr.terisi td { background: #1d2a35; }
+.tabel tr.baru td { animation: kedip 2.5s ease-out; }
+@keyframes kedip { from { background: #2b6382; } to { background: transparent; } }
+.redup { color: #9aa8b5; font-size: 14px; }
+.baris-tombol { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+#ket { min-height: 22px; color: #9aa8b5; }
+#ket.salah { color: #f08a80; } #ket.baik { color: #8fd3a6; }
+.atas { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+label.tampil { display: flex; gap: 8px; align-items: center; color: #9aa8b5; font-size: 14px; cursor: pointer; }
+label.tampil input { width: 18px; height: 18px; }
+.gulir { overflow-x: auto; }
+</style></head>
+<body>
+<main>
+  <form id="masuk" autocomplete="off">
+    <h1>Ruang Kontrol Sandi</h1>
+    <input id="sandiMasuk" type="password" placeholder="SANDI RUANG KONTROL" autocomplete="current-password" required>
+    <button class="utama" type="submit">Masuk</button>
+    <p id="ketMasuk"></p>
+    <p>Hanya bisa dipakai dari perangkat yang Tailscale-nya menyala.</p>
+  </form>
+  <section id="isi" hidden>
+    <div class="atas"><h1>Ruang Kontrol Sandi</h1><button type="button" id="keluar">Keluar</button></div>
+    <p class="redup">Isi kolom SANDI BARU pada akun yang mau diganti (minimal 8 karakter), lalu klik SIMPAN &amp; REKAM. Kolom yang kosong tidak diubah.
+      Perubahan berlaku di web dashboard setelah terbit ulang otomatis, sekitar 5 menit. Sandi lama tidak bisa ditampilkan karena Mac tidak menyimpan sandi.</p>
+    <div class="baris-tombol">
+      <button class="utama" type="button" id="simpan">Simpan &amp; Rekam</button>
+      <button type="button" id="kosongkan">Kosongkan isian</button>
+      <label class="tampil"><input type="checkbox" id="tampil"> tampilkan sandi yang sedang diketik</label>
+      <span id="ket"></span>
+    </div>
+    <div class="gulir"><table class="tabel"><thead><tr><th>Akun</th><th>Peran</th><th>Cabang</th><th>Modul</th><th>Sandi baru</th><th>Terakhir diubah</th><th>Oleh</th></tr></thead>
+      <tbody id="badan"></tbody></table></div>
+    <h2>Rekam perubahan</h2>
+    <div class="gulir"><table class="tabel"><thead><tr><th>Waktu</th><th>Akun</th><th>Perubahan</th><th>Dari</th><th>Perangkat</th></tr></thead>
+      <tbody id="rekam"></tbody></table></div>
+  </section>
+</main>
+<script>
+(() => {
+  const API = "https://svarna5s-mac-mini.tail7a15d8.ts.net:8443";
+  const $ = (i) => document.getElementById(i);
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const kota = (s) => s.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  const letak = (id) => id === "pusat" ? ["Semua cabang", "Pusat"] : id === "pajak" ? ["–", "Pajak"]
+    : id.startsWith("sales-") ? [kota(id.slice(6)), "Sales"] : [kota(id), "Admin Cabang"];
+  const kolom = (a, i) => a.peran === "administrator" ? (i ? "Semua modul" : "Semua cabang") : [...new Set(a.halaman.map((h) => letak(h)[i]))].join(", ") || "–";
+  let token = null, rekamTerakhir = null, putar = null;
+  const kabar = (t, jenis) => { $("ket").textContent = t || ""; $("ket").className = jenis || ""; };
+  async function panggil(jalur, isi) {
+    let r;
+    try { r = await fetch(API + jalur, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
+      body: JSON.stringify(isi || {}) }); }
+    catch (e) { throw new Error("Mac tidak terjangkau. Pastikan Tailscale perangkat ini menyala."); }
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 401 && jalur !== "/masuk-kontrol") { keluar(j.galat); }
+    if (!r.ok) throw new Error(j.galat || "Gagal. Coba lagi.");
+    return j;
+  }
+  function keluar(pesan) {
+    token = null; clearInterval(putar);
+    $("isi").hidden = true; $("masuk").hidden = false; $("ketMasuk").textContent = pesan || ""; $("sandiMasuk").focus();
+  }
+  $("masuk").onsubmit = async (ev) => {
+    ev.preventDefault(); $("ketMasuk").textContent = "Memeriksa...";
+    try { token = (await panggil("/masuk-kontrol", { sandi: $("sandiMasuk").value })).token; }
+    catch (e) { $("ketMasuk").textContent = e.message; $("sandiMasuk").value = ""; return; }
+    $("sandiMasuk").value = ""; $("ketMasuk").textContent = "";
+    $("masuk").hidden = true; $("isi").hidden = false;
+    await muat(true);
+    putar = setInterval(() => muat(false).catch(() => {}), 10000);   // penerima: perubahan dari Kelola akun web
+  };
+  $("keluar").onclick = () => keluar("");
+  function isianSekarang() {
+    const isi = {};
+    document.querySelectorAll("#badan input[data-akun]").forEach((i) => { if (i.value) isi[i.dataset.akun] = i.value; });
+    return isi;
+  }
+  async function muat(awal) {
+    const j = await panggil("/rekam");
+    const tanda = JSON.stringify(j.riwayat[0] || null);
+    if (!awal && tanda === rekamTerakhir) return;
+    const lama = rekamTerakhir ? JSON.parse(rekamTerakhir) : null;
+    rekamTerakhir = tanda;
+    const simpanIsi = isianSekarang(), jenis = $("tampil").checked ? "text" : "password";
+    const urut = [...j.akun].sort((a, b) => (a.peran === b.peran ? a.nama.localeCompare(b.nama) : a.peran === "administrator" ? -1 : 1));
+    $("badan").innerHTML = urut.map((a) => {
+      const t = a.terakhir;
+      return '<tr data-baris="' + esc(a.nama) + '"><td class="akun">' + esc(a.nama) + '</td><td>' + (a.peran === "administrator" ? "Administrator" : "Pengguna") +
+        '</td><td>' + esc(kolom(a, 0)) + '</td><td>' + esc(kolom(a, 1)) + '</td><td class="sandi"><input type="' + jenis + '" data-akun="' + esc(a.nama) +
+        '" autocomplete="new-password" placeholder="(tidak diubah)"></td><td>' + esc(t ? t.waktu.slice(0, 16) : "–") + '</td><td>' + esc(t ? t.sumber : "–") + '</td></tr>';
+    }).join("");
+    document.querySelectorAll("#badan input[data-akun]").forEach((i) => {
+      if (simpanIsi[i.dataset.akun]) i.value = simpanIsi[i.dataset.akun];
+      const tandai = () => i.closest("tr").classList.toggle("terisi", !!i.value);
+      i.oninput = tandai; tandai();
+    });
+    $("rekam").innerHTML = j.riwayat.map((r) => '<tr><td>' + esc(r.waktu) + '</td><td class="akun">' + esc(r.akun) + '</td><td>' + esc(r.aksi) +
+      '</td><td>' + esc(r.sumber) + '</td><td>' + esc(r.ip) + '</td></tr>').join("") || '<tr><td colspan="5" class="redup">Belum ada perubahan tercatat.</td></tr>';
+    if (!awal && lama) {   // tandai baris yang baru berubah dari tempat lain
+      for (const r of j.riwayat) { if (JSON.stringify(r) === JSON.stringify(lama)) break; const b = document.querySelector('[data-baris="' + CSS.escape(r.akun) + '"]'); if (b) b.classList.add("baru"); }
+      kabar("Ada perubahan baru dari " + (j.riwayat[0] || {}).sumber + ".", "baik");
+    }
+  }
+  $("tampil").onchange = () => document.querySelectorAll("#badan input[data-akun]").forEach((i) => { i.type = $("tampil").checked ? "text" : "password"; });
+  $("kosongkan").onclick = () => { document.querySelectorAll("#badan input[data-akun]").forEach((i) => { i.value = ""; i.oninput(); }); kabar(""); };
+  $("simpan").onclick = async () => {
+    const isi = isianSekarang(), nama = Object.keys(isi);
+    if (!nama.length) return kabar("Belum ada sandi baru yang diisi.", "salah");
+    const pendek = nama.filter((n) => isi[n].length < 8);
+    if (pendek.length) return kabar("Sandi minimal 8 karakter: " + pendek.join(", ").toUpperCase(), "salah");
+    $("simpan").disabled = true; kabar("Menyimpan " + nama.length + " akun...");
+    try {
+      const j = await panggil("/reset", { perubahan: nama.map((n) => ({ nama: n, sandi: isi[n] })) });
+      const gagal = j.hasil.filter((h) => !h.ok);
+      j.hasil.filter((h) => h.ok).forEach((h) => { const i = document.querySelector('#badan input[data-akun="' + CSS.escape(h.nama) + '"]'); if (i) { i.value = ""; i.oninput(); } });
+      kabar(gagal.length ? "Sebagian gagal: " + gagal.map((h) => h.nama.toUpperCase() + " (" + h.galat + ")").join("; ")
+        : "Tersimpan & terekam (" + nama.length + " akun). Berlaku di web dashboard sekitar 5 menit lagi.", gagal.length ? "salah" : "baik");
+      rekamTerakhir = null; await muat(true);
+    } catch (e) { kabar(e.message, "salah"); }
+    finally { $("simpan").disabled = false; }
+  };
+  $("sandiMasuk").focus();
+})();
+</script>
+</body></html>

@@ -4,13 +4,16 @@
 <title>Ruang Kontrol Sandi</title>
 <!-- Ruang kontrol sandi web dashboard (BEN, 31 Okt 2026, permintaan Joe): tabel akun; isi SANDI BARU lalu SIMPAN & REKAM
      (dikirim ke kelola_web.py Mac Winros, hanya lewat Tailscale). Halaman ini juga penerima: perubahan dari Kelola akun web
-     ikut tampil (dibaca ulang tiap 10 detik). Sandi tidak pernah ditampilkan - Mac tidak menyimpan sandi. -->
+     ikut tampil (dibaca ulang tiap 10 detik).
+     Joe 12 Nov 2026: kolom SANDI TERSIMPAN = sandi yang pernah disimpan lewat halaman ini, dicatat Mac terenkripsi dengan
+     kunci turunan sandi Ruang kontrol (brankas-sandi.json), dikirim hanya ke sesi yang sudah masuk. Sandi yang diketik lewat
+     terminal Mac tidak tercatat (tampil "–"). Akun bawaan yang belum bersandi (mis. IKLAN) tampil dan bisa diisi di sini. -->
 <style>
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 body { margin: 0; background: #11171d; color: #e6ecf1; font: 17px/1.45 "Aptos Narrow", "Archivo Narrow", "Arial Narrow", system-ui, sans-serif; }
-@media (min-width: 700px) { html { zoom: .75; } }
-main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 60px; }
+@media (min-width: 700px) { html { zoom: .85; } }
+main { max-width: none; margin: 0; padding: 20px 20px 60px; }
 h1 { font-size: 24px; letter-spacing: .3em; text-transform: uppercase; margin: 8px 0 20px; }
 h2 { font-size: 15px; letter-spacing: .25em; color: #6fb3d2; text-transform: uppercase; margin: 28px 0 10px; }
 button { font: 600 15px "Aptos Narrow", "Archivo Narrow", sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #e6ecf1;
@@ -29,6 +32,11 @@ input:focus { border-color: #6fb3d2; }
 .tabel th { background: #18212a; color: #9aa8b5; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; position: sticky; top: 0; }
 .tabel td.akun { font-weight: 600; text-transform: uppercase; white-space: nowrap; }
 .tabel td.sandi { width: 260px; padding: 4px 6px; }
+.tabel td.tersimpan { font: 600 17px "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; white-space: nowrap; letter-spacing: .04em; }
+.tabel td.tersimpan .redup { font: inherit; font-weight: 400; letter-spacing: 0; }
+body.sembunyi .tabel td.tersimpan .s { filter: blur(7px); user-select: none; }
+.tabel td.tersimpan .s { cursor: pointer; } .tabel td.tersimpan .s:hover { color: #6fb3d2; }
+.tabel tr.belum td.akun::after { content: " · belum ada sandi"; color: #f0c674; font-weight: 400; text-transform: none; font-size: 13px; }
 .tabel tr.terisi td { background: #1d2a35; }
 .tabel tr.baru td { animation: kedip 2.5s ease-out; }
 @keyframes kedip { from { background: #2b6382; } to { background: transparent; } }
@@ -53,14 +61,17 @@ label.tampil input { width: 18px; height: 18px; }
   <section id="isi" hidden>
     <div class="atas"><h1>Ruang Kontrol Sandi</h1><button type="button" id="keluar">Keluar</button></div>
     <p class="redup">Isi kolom SANDI BARU pada akun yang mau diganti (minimal 8 karakter), lalu klik SIMPAN &amp; REKAM. Kolom yang kosong tidak diubah.
-      Perubahan berlaku di web dashboard setelah terbit ulang otomatis, sekitar 5 menit. Sandi lama tidak bisa ditampilkan karena Mac tidak menyimpan sandi.</p>
+      Perubahan berlaku di web dashboard setelah terbit ulang otomatis, sekitar 5 menit. Kolom SANDI TERSIMPAN menampilkan sandi yang pernah
+      disimpan lewat halaman ini (tersimpan terenkripsi di Mac, hanya terbaca sesudah masuk Ruang kontrol; klik sandi untuk menyalin).
+      Sandi yang diketik lewat terminal Mac tidak tercatat (–). Akun bertanda "belum ada sandi" bisa langsung diisi di sini.</p>
     <div class="baris-tombol">
       <button class="utama" type="button" id="simpan">Simpan &amp; Rekam</button>
       <button type="button" id="kosongkan">Kosongkan isian</button>
       <label class="tampil"><input type="checkbox" id="tampil"> tampilkan sandi yang sedang diketik</label>
+      <label class="tampil"><input type="checkbox" id="sembunyi"> buramkan sandi tersimpan</label>
       <span id="ket"></span>
     </div>
-    <div class="gulir"><table class="tabel"><thead><tr><th>Akun</th><th>Peran</th><th>Cabang</th><th>Modul</th><th>Sandi baru</th><th>Terakhir diubah</th><th>Oleh</th></tr></thead>
+    <div class="gulir"><table class="tabel"><thead><tr><th>Akun</th><th>Peran</th><th>Cabang</th><th>Modul</th><th>Sandi tersimpan</th><th>Sandi baru</th><th>Terakhir diubah</th><th>Oleh</th></tr></thead>
       <tbody id="badan"></tbody></table></div>
     <h2>Rekam perubahan</h2>
     <div class="gulir"><table class="tabel"><thead><tr><th>Waktu</th><th>Akun</th><th>Perubahan</th><th>Dari</th><th>Perangkat</th></tr></thead>
@@ -73,7 +84,7 @@ label.tampil input { width: 18px; height: 18px; }
   const $ = (i) => document.getElementById(i);
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const kota = (s) => s.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-  const letak = (id) => id === "pusat" ? ["Semua cabang", "Pusat"] : id === "pajak" ? ["–", "Pajak"] : id === "gudang" ? ["Semua cabang", "Gudang"] : id.startsWith("vendor-") ? ["–", "Vendor"]
+  const letak = (id) => id === "pusat" ? ["Semua cabang", "Pusat"] : id === "pajak" ? ["–", "Pajak"] : id === "iklan" ? ["Semua toko", "Iklan"] : id === "gudang" ? ["Semua cabang", "Gudang"] : id.startsWith("vendor-") ? ["–", "Vendor"]
     : id.startsWith("sales-") ? [kota(id.slice(6)), "Sales"] : [kota(id), "Admin Cabang"];
   const kolom = (a, i) => a.peran === "administrator" ? (i ? "Semua modul" : "Semua cabang") : [...new Set(a.halaman.map((h) => letak(h)[i]))].join(", ") || "–";
   let token = null, rekamTerakhir = null, putar = null;
@@ -117,10 +128,15 @@ label.tampil input { width: 18px; height: 18px; }
     const urut = [...j.akun].sort((a, b) => (a.peran === b.peran ? a.nama.localeCompare(b.nama) : a.peran === "administrator" ? -1 : 1));
     $("badan").innerHTML = urut.map((a) => {
       const t = a.terakhir;
-      return '<tr data-baris="' + esc(a.nama) + '"><td class="akun">' + esc(a.nama) + '</td><td>' + (a.peran === "administrator" ? "Administrator" : "Pengguna") +
-        '</td><td>' + esc(kolom(a, 0)) + '</td><td>' + esc(kolom(a, 1)) + '</td><td class="sandi"><input type="' + jenis + '" data-akun="' + esc(a.nama) +
-        '" autocomplete="new-password" placeholder="(tidak diubah)"></td><td>' + esc(t ? t.waktu.slice(0, 16) : "–") + '</td><td>' + esc(t ? t.sumber : "–") + '</td></tr>';
+      const tersimpan = a.sandi ? '<span class="s" title="klik untuk menyalin">' + esc(a.sandi) + '</span>'
+        : a.tercatat ? '<span class="redup" title="tersimpan dengan sandi Ruang kontrol yang lama">tidak terbaca</span>' : '<span class="redup">–</span>';
+      return '<tr data-baris="' + esc(a.nama) + '"' + (a.belum ? ' class="belum"' : '') + '><td class="akun">' + esc(a.nama) + '</td><td>' + (a.peran === "administrator" ? "Administrator" : "Pengguna") +
+        '</td><td>' + esc(kolom(a, 0)) + '</td><td>' + esc(kolom(a, 1)) + '</td><td class="tersimpan">' + tersimpan + '</td><td class="sandi"><input type="' + jenis + '" data-akun="' + esc(a.nama) +
+        '" autocomplete="new-password" placeholder="' + (a.belum ? "(isi sandi pertama)" : "(tidak diubah)") + '"></td><td>' + esc(t ? t.waktu.slice(0, 16) : "–") + '</td><td>' + esc(t ? t.sumber : "–") + '</td></tr>';
     }).join("");
+    document.querySelectorAll("#badan td.tersimpan .s").forEach((x) => { x.onclick = async () => {
+      try { await navigator.clipboard.writeText(x.textContent); kabar("Sandi " + x.closest("tr").dataset.baris.toUpperCase() + " disalin.", "baik"); }
+      catch (e) { kabar("Tidak bisa menyalin otomatis - blok lalu salin manual.", "salah"); } }; });
     document.querySelectorAll("#badan input[data-akun]").forEach((i) => {
       if (simpanIsi[i.dataset.akun]) i.value = simpanIsi[i.dataset.akun];
       const tandai = () => i.closest("tr").classList.toggle("terisi", !!i.value);
@@ -134,6 +150,7 @@ label.tampil input { width: 18px; height: 18px; }
     }
   }
   $("tampil").onchange = () => document.querySelectorAll("#badan input[data-akun]").forEach((i) => { i.type = $("tampil").checked ? "text" : "password"; });
+  $("sembunyi").onchange = () => document.body.classList.toggle("sembunyi", $("sembunyi").checked);
   $("kosongkan").onclick = () => { document.querySelectorAll("#badan input[data-akun]").forEach((i) => { i.value = ""; i.oninput(); }); kabar(""); };
   $("simpan").onclick = async () => {
     const isi = isianSekarang(), nama = Object.keys(isi);
